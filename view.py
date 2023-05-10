@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import QMainWindow, QLineEdit, QPushButton, QVBoxLayout, QH
 from PyQt6.QtCore import pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
+from model import Point
 
 class MplCanvas(FigureCanvasQTAgg):
     """MPL/QT Canvas with some default characteristics and some axes."""
@@ -29,7 +30,10 @@ class PlotWithToolbar(QWidget):
         self.canvas.clear()
 
     def plot(self, x_data, y_data, **kwargs):
-        self.canvas.axes.plot(x_data, y_data, **kwargs)
+        return self.canvas.axes.plot(x_data, y_data, **kwargs)
+
+    def plot_point(self, point: Point, **kwargs):
+        return self.canvas.axes.plot(point.x, point.y, **kwargs)
 
     def label_x(self, new_label, **kwargs):
         self.canvas.axes.set_xlabel(new_label, **kwargs)
@@ -40,7 +44,9 @@ class PlotWithToolbar(QWidget):
     def update_toolbar(self):
         self.toolbar.update()
 
-
+    def set_lims(self, top, bottom, left, right):
+        self.canvas.axes.set_xlim(left, right)
+        self.canvas.axes.set_ylim(bottom, top)
 
 class HSeparator(QFrame):
     """Horizontal line separator"""
@@ -87,6 +93,9 @@ class MainWindow(QMainWindow):
         #Labels
         dataLabel = QLabel("Data Source")
         dfLabel = QLabel("Dataframe")
+        nameLabel = QLabel("Name Column")
+        #Combobox
+        self.nameBox = QComboBox()
         #Layout
         self.IOLayout.addWidget(self.startButton)
         self.IOLayout.addWidget(VSeparator())
@@ -97,6 +106,9 @@ class MainWindow(QMainWindow):
         self.IOLayout.addWidget(dfLabel)
         self.IOLayout.addWidget(self.dataframeLocation)
         self.IOLayout.addWidget(self.chooseDfButton)
+        self.IOLayout.addWidget(VSeparator())
+        self.IOLayout.addWidget(nameLabel)
+        self.IOLayout.addWidget(self.nameBox)
         self.IOLayout.addWidget(VSeparator())
         self.IOLayout.addWidget(self.newButton)
 
