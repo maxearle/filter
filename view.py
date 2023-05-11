@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QMainWindow, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame, QComboBox
+from PyQt6.QtWidgets import QMainWindow, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame, QComboBox, QMessageBox
 from PyQt6.QtCore import pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
@@ -152,6 +152,13 @@ class MainWindow(QMainWindow):
         self.controlsLayout.addWidget(self.saveSelectionButton)
 
         self.mainLayout.addLayout(self.controlsLayout)
+
+class ErrorDialog(QMessageBox):
+    def __init__(self, msg: str):
+        super().__init__()
+        self.setWindowTitle("Error")
+        self.setText(msg)
+        self.exec()
 
 
 
