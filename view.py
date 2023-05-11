@@ -17,6 +17,7 @@ class MplCanvas(FigureCanvasQTAgg):
 class PlotWithToolbar(QWidget):
     def __init__(self, title):
         super().__init__()
+        self.title = title
         self.wLayout = QVBoxLayout()
         self.canvas = MplCanvas(self)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
@@ -28,12 +29,25 @@ class PlotWithToolbar(QWidget):
 
     def clear_axes(self):
         self.canvas.clear()
+        self.label_x("")
+        self.label_y("")
+        self.canvas.axes.set_title(self.title)
+        self.canvas.draw()
 
     def plot(self, x_data, y_data, **kwargs):
-        return self.canvas.axes.plot(x_data, y_data, **kwargs)
+        artist = self.canvas.axes.plot(x_data, y_data, **kwargs)
+        self.canvas.draw()
+        return artist
+    
+    def scatter(self, x_data, y_data, **kwargs):
+        artist = self.canvas.axes.scatter(x_data, y_data, **kwargs)
+        self.canvas.draw()
+        return artist
 
     def plot_point(self, point: Point, **kwargs):
-        return self.canvas.axes.plot(point.x, point.y, **kwargs)
+        artist = self.canvas.axes.plot(point.x, point.y, **kwargs)
+        self.canvas.draw()
+        return artist
 
     def label_x(self, new_label, **kwargs):
         self.canvas.axes.set_xlabel(new_label, **kwargs)
@@ -87,6 +101,7 @@ class MainWindow(QMainWindow):
         self.chooseDataButton = QPushButton("Choose Data (.hdf5)")
         self.startButton = QPushButton("Start")
         self.newButton = QPushButton("New Dataset")
+        self.lockNameButton = QPushButton("Lock in Names")
         #Line entries
         self.dataLocation = QLineEdit()
         self.dataframeLocation = QLineEdit()
@@ -109,6 +124,7 @@ class MainWindow(QMainWindow):
         self.IOLayout.addWidget(VSeparator())
         self.IOLayout.addWidget(nameLabel)
         self.IOLayout.addWidget(self.nameBox)
+        self.IOLayout.addWidget(self.lockNameButton)
         self.IOLayout.addWidget(VSeparator())
         self.IOLayout.addWidget(self.newButton)
 
@@ -132,6 +148,7 @@ class MainWindow(QMainWindow):
         self.chooseRegionButton = QPushButton("Choose Plot Region to Save")
         self.resetAllButton = QPushButton("Reset All Choices")
         self.saveSelectionButton = QPushButton("Save Subset to Dataframe")
+        self.updatePlotButton = QPushButton("Update Plot")
         #Labels
         xLabel = QLabel("x-Axis Parameter")
         yLabel = QLabel("y-Axis Parameter")
@@ -143,6 +160,7 @@ class MainWindow(QMainWindow):
         self.controlsLayout.addWidget(self.xBox)
         self.controlsLayout.addWidget(yLabel)
         self.controlsLayout.addWidget(self.yBox)
+        self.controlsLayout.addWidget(self.updatePlotButton)
         self.controlsLayout.addWidget(VSeparator())
         self.controlsLayout.addWidget(self.chooseFirstButton)
         self.controlsLayout.addWidget(self.chooseSecButton)

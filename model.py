@@ -1,6 +1,7 @@
 import pandas as pd
 import h5py
 import os
+import logging
 import numpy as np
 
 def check_path_existence(path: str) -> bool:
@@ -20,7 +21,7 @@ def get_distance(pt1: 'Point', pt2: 'Point') -> float:
 
 def get_nearest(df: pd.DataFrame, params: tuple[str,str], pt: 'Point') -> dict:
     for i, row in enumerate(df.iterrows()):
-        rowPt = Point(float(row[params[0]]), float(row[params[1]]))
+        rowPt = Point(float(row[1][params[0]]), float(row[1][params[1]]))
         dist = get_distance(pt, rowPt)
 
         if i == 0:
@@ -32,7 +33,7 @@ def get_nearest(df: pd.DataFrame, params: tuple[str,str], pt: 'Point') -> dict:
             closest = i
             closest_dist = dist
     
-    return df.iloc[closest,:].to_dict(orient = 'records')[0]
+    return df.iloc[closest,:].to_dict()
 
 
 class Point():
@@ -61,7 +62,7 @@ class Model():
         return self.data['current_data'].attrs['sample_rate']
     
     def get_event_data(self, name: str) -> np.ndarray:
-        return self.data[f'\\current_data\\{name}']
+        return self.data['current_data'][name][:]
     
     def get_df_cols(self, exclude: int | None = None) -> list[str]:
         if exclude is None:
