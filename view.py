@@ -66,6 +66,9 @@ class PlotWithToolbar(QWidget):
         self.canvas.axes.set_ylim(bottom, top)
         self.canvas.draw()
 
+    def update(self):
+        self.canvas.draw()
+
 class HSeparator(QFrame):
     """Horizontal line separator"""
     def __init__(self):

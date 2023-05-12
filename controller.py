@@ -345,6 +345,8 @@ class Controller():
             self.split_point2_artist.remove()   
         if self.split_line_artist is not None:
             self.split_line_artist.remove()
+        self.view.scatterPlot.update()
+        self.view.eventPlot.update()
         self.split_point1 = None
         self.split_point2 = None
         self.split_point1_artist = None
