@@ -15,13 +15,14 @@ class MplCanvas(FigureCanvasQTAgg):
         self.axes.cla()
     
 class PlotWithToolbar(QWidget):
-    def __init__(self, title):
+    def __init__(self, title, autoscale = True):
         super().__init__()
         self.title = title
         self.wLayout = QVBoxLayout()
         self.canvas = MplCanvas(self)
         self.toolbar = NavigationToolbar2QT(self.canvas, self)
         self.canvas.axes.set_title(title)
+        self.canvas.axes.autoscale(autoscale)
 
         self.setLayout(self.wLayout)
         self.wLayout.addWidget(self.canvas)
@@ -51,9 +52,11 @@ class PlotWithToolbar(QWidget):
 
     def label_x(self, new_label, **kwargs):
         self.canvas.axes.set_xlabel(new_label, **kwargs)
+        self.canvas.draw()
 
     def label_y(self, new_label, **kwargs):
         self.canvas.axes.set_ylabel(new_label, **kwargs)
+        self.canvas.draw()
 
     def update_toolbar(self):
         self.toolbar.update()
@@ -61,6 +64,7 @@ class PlotWithToolbar(QWidget):
     def set_lims(self, top, bottom, left, right):
         self.canvas.axes.set_xlim(left, right)
         self.canvas.axes.set_ylim(bottom, top)
+        self.canvas.draw()
 
 class HSeparator(QFrame):
     """Horizontal line separator"""
@@ -132,7 +136,7 @@ class MainWindow(QMainWindow):
 
     def _initialise_plots(self):
         #Canvases
-        self.scatterPlot = PlotWithToolbar("Scatter Plot")
+        self.scatterPlot = PlotWithToolbar("Scatter Plot",autoscale=False)
         self.eventPlot = PlotWithToolbar("Selected Event")
         #Pack
         self.plotsLayout.addWidget(self.scatterPlot)

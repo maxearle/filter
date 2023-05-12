@@ -7,6 +7,9 @@ import numpy as np
 def check_path_existence(path: str) -> bool:
     return os.path.exists(path)
 
+def remove_bad_values(array: np.ndarray) -> np.ndarray:
+    return array[np.isfinite(array)]
+
 def get_file_ext(path: str) -> str:
      _, ext = os.path.splitext(path)
      return ext
@@ -34,6 +37,9 @@ def get_nearest(df: pd.DataFrame, params: tuple[str,str], pt: 'Point') -> dict:
             closest_dist = dist
     
     return df.iloc[closest,:].to_dict()
+
+def straight_line(x, b, a):
+    return b*x + a
 
 
 class Point():
@@ -71,11 +77,23 @@ class Model():
             return list(self.df.iloc[:,:exclude].columns) + list(self.df.iloc[:,(exclude + 1):].columns)
         
     def choose_event(self, click_loc: Point, params: tuple[str,str], tol = 0.02) -> dict | None:
-            full_param_ranges = (np.ptp(self.df[params[0]]), np.ptp(self.df[params[1]]))
+            #Condition data by removing non-finite values
+            x_data = np.array(self.df[params[0]])
+            x_data_wo_bad_values = remove_bad_values(x_data)
+            y_data = np.array(self.df[params[1]])
+            y_data_wo_bad_values = remove_bad_values(y_data)
+
+            #Work out range of values eligible for shortlist
+            full_param_ranges = (np.ptp(x_data_wo_bad_values), np.ptp(y_data_wo_bad_values))
             param_ranges = ((click_loc.x - tol*full_param_ranges[0], click_loc.x + tol*full_param_ranges[0]),
                             (click_loc.y - tol*full_param_ranges[1], click_loc.y + tol*full_param_ranges[1]))
             
-            subDf1 = self.df.query(f"{params[0]} > {param_ranges[0][0]} & {params[0]} < {param_ranges[0][1]}")
+            #First deal with nans
+            dfInfToNan = self.df.replace([np.inf, -np.inf], np.nan, inplace=False)
+            conditionedDf = dfInfToNan.dropna(subset = [params[0],params[1]], how = 'all')
+
+            #Then select shortlist
+            subDf1 = conditionedDf.query(f"{params[0]} > {param_ranges[0][0]} & {params[0]} < {param_ranges[0][1]}")
             subDf2 = subDf1.query(f"{params[1]} > {param_ranges[1][0]} & {params[1]} < {param_ranges[1][1]}")
 
             if len(subDf2) == 0:

@@ -1,9 +1,13 @@
 from PyQt6.QtWidgets import QFileDialog
-from model import Model, check_path_existence, get_file_ext, Point, get_line
+from model import Model, check_path_existence, get_file_ext, Point, get_line, straight_line, remove_bad_values
 from view import MainWindow, ErrorDialog
 import numpy as np
 import logging
 import matplotlib as mpl
+
+#TODO In this module there's a lot of logic (specifically pertaining to the selection of split points)
+#that I feel should be moved to the Model. This would make resetting things easier, since currently they all have to be reset manually by assignment.
+#Would be easier if you could just get a new instance of the Model which works to reset all the other logical stuff.
 
 def open_file_dialog(filt: str):
     qfd = QFileDialog()
@@ -19,6 +23,8 @@ class Controller():
     split_point2: Point | None = None
     split_point2_artist = None
     split_line_artist = None
+    x_parameter: str | None
+    y_parameter: str | None
     def __init__(self, version = "Default"):
         self.version = version
         self.model = Model()
@@ -68,6 +74,8 @@ class Controller():
         self.split_point1_artist = None
         self.split_point2_artist = None
         self.split_line_artist = None
+        self.x_parameter = None
+        self.y_parameter = None
         
 
     def _initialise_buttons(self):
@@ -148,15 +156,15 @@ class Controller():
 
     def update_scatter_plot(self):
         #Check selected parameters
-        x_parameter = self.view.xBox.currentText()
-        y_parameter = self.view.yBox.currentText()
+        self.x_parameter = self.view.xBox.currentText()
+        self.y_parameter = self.view.yBox.currentText()
 
         #Fetch data
         try:
-            x_data = np.array(self.model.df[x_parameter])
-            y_data = np.array(self.model.df[y_parameter])
+            x_data = np.array(self.model.df[self.x_parameter])
+            y_data = np.array(self.model.df[self.y_parameter])
         except KeyError:
-            logging.info(f"Failed to fetch data for parameters {x_parameter}, {y_parameter}...")
+            logging.info(f"Failed to fetch data for parameters {self.x_parameter}, {self.y_parameter}...")
             return None
 
         #Reset plots
@@ -172,10 +180,27 @@ class Controller():
         self.split_point2_artist = None
         self.split_line_artist = None
 
+        #Reset inactive buttons
+        self.view.chooseRegionButton.setEnabled(False)
+        self.view.saveSelectionButton.setEnabled(False)
+
         #Plot new scatter plot
         logging.info(f"Plotting {len(x_data)} points...")
         self.view.scatterPlot.scatter(x_data, y_data, alpha = 0.1)
         logging.info("Done plotting.")
+
+        #Set lims
+        x_wo_bad_vals = remove_bad_values(x_data)
+        x_range = np.ptp(x_wo_bad_vals)
+        x_lims = (np.min(x_wo_bad_vals) - 0.05*x_range,np.max(x_wo_bad_vals) + 0.05*x_range)
+        y_wo_bad_vals = remove_bad_values(y_data)
+        y_range = np.ptp(y_wo_bad_vals)
+        y_lims = (np.max(y_wo_bad_vals) + 0.05*y_range, np.min(y_wo_bad_vals) - 0.05*y_range)
+        self.view.scatterPlot.set_lims(*y_lims, *x_lims)
+
+        #Label axes
+        self.view.scatterPlot.label_x(self.x_parameter)
+        self.view.scatterPlot.label_y(self.y_parameter)
 
         #Update toolbar
         self.view.scatterPlot.update_toolbar()
@@ -205,9 +230,7 @@ class Controller():
         click = Point(event.xdata, event.ydata)
 
         #Picking nearest event (if there is one)
-        x_parameter = self.view.xBox.currentText()
-        y_parameter = self.view.yBox.currentText()
-        picked = self.model.choose_event(click, (x_parameter, y_parameter))
+        picked = self.model.choose_event(click, (self.x_parameter, self.y_parameter))
 
         #Check whether any event was found
         if picked is None:
@@ -222,12 +245,11 @@ class Controller():
 
         #Remove any old points
         if self.event_point is not None:
-            point = self.event_point.pop(0)
-            point.remove()
+            self.event_point.remove()
 
         #Plot marker for selected event
-        event_point = Point(picked[x_parameter], picked[y_parameter])
-        self.event_point = self.view.scatterPlot.plot_point(event_point, c='r', marker = 'o')
+        event_point = Point(picked[self.x_parameter], picked[self.y_parameter])
+        self.event_point, = self.view.scatterPlot.plot_point(event_point, c='r', marker = 'o')
 
     def choose_first(self):
         #TODO this spaghetti could be later replaced with a context manager
@@ -248,22 +270,25 @@ class Controller():
         self.split_point1 = Point(event.xdata, event.ydata)
 
         if self.split_point1_artist is not None:
-            point = self.split_point1_artist.pop(0)
-            point.remove()
-        self.split_point1_artist = self.view.scatterPlot.plot_point(self.split_point1, c='g', marker = 'o')
+            self.split_point1_artist.remove()
+        self.split_point1_artist, = self.view.scatterPlot.plot_point(self.split_point1, c='g', marker = 'o')
 
+        self.view.updatePlotButton.setEnabled(True)
         self.view.chooseFirstButton.setEnabled(True)
         self.view.chooseSecButton.setEnabled(True)
-        self.view.chooseRegionButton.setEnabled(True)
         self.view.resetAllButton.setEnabled(True)
-        self.view.saveSelectionButton.setEnabled(True)
         self.view.xBox.setEnabled(True)
         self.view.yBox.setEnabled(True)
 
+        #Check to see if we can make a line now
+        self.check_line()
+
+        #Disconnect split point selection callback, reconnect free select callback
+        self.view.scatterPlot.canvas.mpl_disconnect(self.scatter_cid)
         self.scatter_cid = self.view.scatterPlot.canvas.mpl_connect('button_press_event', self.select_event)
 
     def choose_second(self):
-        #TODO this spaghetti could be later replaced with a context manager
+        #HACK This is a repeat of choose_first. Some way to avoid this duplication?
         #Disable everything and disconnect free_select
         self.view.scatterPlot.canvas.mpl_disconnect(self.scatter_cid)
         self.view.updatePlotButton.setEnabled(False)
@@ -281,37 +306,45 @@ class Controller():
         self.split_point2 = Point(event.xdata, event.ydata)
 
         if self.split_point2_artist is not None:
-            point = self.split_point2_artist.pop(0)
-            point.remove()
-        self.split_point2_artist = self.view.scatterPlot.plot_point(self.split_point2, c='g', marker = 'o')
+            self.split_point2_artist.remove()
+        self.split_point2_artist, = self.view.scatterPlot.plot_point(self.split_point2, c='g', marker = 'o')
 
         self.view.updatePlotButton.setEnabled(True)
         self.view.chooseFirstButton.setEnabled(True)
         self.view.chooseSecButton.setEnabled(True)
-        self.view.chooseRegionButton.setEnabled(True)
         self.view.resetAllButton.setEnabled(True)
-        self.view.saveSelectionButton.setEnabled(True)
         self.view.xBox.setEnabled(True)
         self.view.yBox.setEnabled(True)
 
+        #Check to see if we can make a line now
+        self.check_line()
+
+        #Disconnect split point selection callback, reconnect free select callback
+        self.view.scatterPlot.canvas.mpl_disconnect(self.scatter_cid)
         self.scatter_cid = self.view.scatterPlot.canvas.mpl_connect('button_press_event', self.select_event)
 
 
     def check_line(self):
+        if self.split_line_artist is not None:
+            self.split_line_artist.remove()
         if self.split_point1 is not None and self.split_point2 is not None:
-            line = get_line(self.split_point1, self.split_point2)
-            self.split_line_artist = self.view.scatterPlot.plot()
+            logging.info("Two split points selected, trying to draw line...")
+            x_data = np.array(self.model.df[self.x_parameter])
+            x_range = np.linspace(np.nanmin(x_data),np.nanmax(x_data), 100)
+            line_vars = get_line(self.split_point1, self.split_point2)
+            self.split_line_artist, = self.view.scatterPlot.plot(x_range, straight_line(x_range, *line_vars), c = 'g')
+
+            #Region selection should now be available
+            self.view.chooseRegionButton.setEnabled(True)
+
 
     def reset_all_choices(self):
         if self.split_point1_artist is not None:
-            point1 = self.split_point1_artist.pop(0)
-            point1.remove()
+            self.split_point1_artist.remove()
         if self.split_point2_artist is not None:
-            point2 = self.split_point2_artist.pop(0)
-            point2.remove()
+            self.split_point2_artist.remove()   
         if self.split_line_artist is not None:
-            line = self.split_line_artist.pop(0)
-            line.remove()
+            self.split_line_artist.remove()
         self.split_point1 = None
         self.split_point2 = None
         self.split_point1_artist = None
