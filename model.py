@@ -41,6 +41,9 @@ def get_nearest(df: pd.DataFrame, params: tuple[str,str], pt: 'Point') -> dict:
 def straight_line(x, b, a):
     return b*x + a
 
+def isbelow(pt: 'Point', line_vars: tuple[float,float]) -> bool:
+    return pt.y < (pt.x * line_vars[0] + line_vars[1])
+
 
 class Point():
     """Simple point class"""
@@ -57,6 +60,7 @@ class Model():
     def __init__(self):
         self.point1 = Point()
         self.point2 = Point()
+        self.region_point = Point()
 
     def open_hdf5(self, file_name: str):
         self.data = h5py.File(file_name, 'r')
@@ -101,5 +105,19 @@ class Model():
             
             event_props = get_nearest(subDf2, params, click_loc)
             return event_props
+    def get_sub_df(self, click_loc: Point, params: tuple[str,str], line_vars = tuple[float,float]):
+
+        #First deal with nans
+        dfInfToNan = self.df.replace([np.inf, -np.inf], np.nan, inplace=False)
+        conditionedDf = dfInfToNan.dropna(subset = [params[0],params[1]], how = 'all')
+
+        if isbelow(click_loc, line_vars):
+            subDf = conditionedDf.query(f"{params[1]} < ({params[0]}*{line_vars[0]} + {line_vars[1]})")
+            logging.info("Returning sub-df for points below split line.")
+            return subDf
+        else:
+            subDf = conditionedDf.query(f"{params[1]} > ({params[0]}*{line_vars[0]} + {line_vars[1]})")
+            logging.info("Returning sub-df for points below split line.")
+            return subDf
 
 

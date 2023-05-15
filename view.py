@@ -49,6 +49,11 @@ class PlotWithToolbar(QWidget):
         artist = self.canvas.axes.plot(point.x, point.y, **kwargs)
         self.canvas.draw()
         return artist
+    
+    def fill_between(self, x, y1, y2, **kwargs):
+        poly = self.canvas.axes.fill_between(x,y1,y2,**kwargs)
+        self.canvas.draw()
+        return poly
 
     def label_x(self, new_label, **kwargs):
         self.canvas.axes.set_xlabel(new_label, **kwargs)

@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QFileDialog
-from model import Model, check_path_existence, get_file_ext, Point, get_line, straight_line, remove_bad_values
+from model import Model, check_path_existence, get_file_ext, Point, get_line, straight_line, remove_bad_values, isbelow
 from view import MainWindow, ErrorDialog
 import numpy as np
 import logging
@@ -15,6 +15,12 @@ def open_file_dialog(filt: str):
     f = qfd.getOpenFileName(qfd, "Select File", path, filt)
     return f[0]
 
+def save_dialog(root: str, ext: str):
+    qfd = QFileDialog()
+    path = None
+    f = qfd.getSaveFileName(qfd, "Save Location", root, ext)
+    return f[0]
+
 class Controller():
     free_select: bool = False
     event_point = None
@@ -23,6 +29,7 @@ class Controller():
     split_point2: Point | None = None
     split_point2_artist = None
     split_line_artist = None
+    shade_artist = None
     x_parameter: str | None
     y_parameter: str | None
     def __init__(self, version = "Default"):
@@ -74,6 +81,7 @@ class Controller():
         self.split_point1_artist = None
         self.split_point2_artist = None
         self.split_line_artist = None
+        self._reset_shading()
         self.x_parameter = None
         self.y_parameter = None
         
@@ -89,6 +97,8 @@ class Controller():
         self.view.chooseFirstButton.clicked.connect(self.choose_first)
         self.view.chooseSecButton.clicked.connect(self.choose_second)
         self.view.resetAllButton.clicked.connect(self.reset_all_choices)
+        self.view.chooseRegionButton.clicked.connect(self.select_region)
+        self.view.saveSelectionButton.clicked.connect(self.save_selection)
         ...
 
     def start(self):
@@ -179,6 +189,8 @@ class Controller():
         self.split_point1_artist = None
         self.split_point2_artist = None
         self.split_line_artist = None
+
+        self._reset_shading()
 
         #Reset inactive buttons
         self.view.chooseRegionButton.setEnabled(False)
@@ -272,6 +284,8 @@ class Controller():
         if self.split_point1_artist is not None:
             self.split_point1_artist.remove()
         self.split_point1_artist, = self.view.scatterPlot.plot_point(self.split_point1, c='g', marker = 'o')
+        
+        self._reset_shading()
 
         self.view.updatePlotButton.setEnabled(True)
         self.view.chooseFirstButton.setEnabled(True)
@@ -279,6 +293,8 @@ class Controller():
         self.view.resetAllButton.setEnabled(True)
         self.view.xBox.setEnabled(True)
         self.view.yBox.setEnabled(True)
+
+        logging.info(f"Click detected at {event.xdata}, {event.ydata}, placing first point of split line.")
 
         #Check to see if we can make a line now
         self.check_line()
@@ -309,12 +325,16 @@ class Controller():
             self.split_point2_artist.remove()
         self.split_point2_artist, = self.view.scatterPlot.plot_point(self.split_point2, c='g', marker = 'o')
 
+        self._reset_shading()
+
         self.view.updatePlotButton.setEnabled(True)
         self.view.chooseFirstButton.setEnabled(True)
         self.view.chooseSecButton.setEnabled(True)
         self.view.resetAllButton.setEnabled(True)
         self.view.xBox.setEnabled(True)
         self.view.yBox.setEnabled(True)
+
+        logging.info(f"Click detected at {event.xdata}, {event.ydata}, placing second point of split line.")
 
         #Check to see if we can make a line now
         self.check_line()
@@ -337,6 +357,63 @@ class Controller():
             #Region selection should now be available
             self.view.chooseRegionButton.setEnabled(True)
 
+    def select_region(self):
+        #Disable everything and disconnect free_select
+        self.view.scatterPlot.canvas.mpl_disconnect(self.scatter_cid)
+        self.view.updatePlotButton.setEnabled(False)
+        self.view.chooseFirstButton.setEnabled(False)
+        self.view.chooseSecButton.setEnabled(False)
+        self.view.chooseRegionButton.setEnabled(False)
+        self.view.resetAllButton.setEnabled(False)
+        self.view.saveSelectionButton.setEnabled(False)
+        self.view.xBox.setEnabled(False)
+        self.view.yBox.setEnabled(False)
+
+        self.scatter_cid = self.view.scatterPlot.canvas.mpl_connect('button_press_event',self._click_region)
+
+    def _click_region(self, event):
+        if self.split_line_artist is None:
+            raise ValueError("Tried to select region whilst no split line was present.")
+        self._reset_shading()
+        
+        self.model.region_point = Point(event.xdata,event.ydata)
+        
+        x_data = np.array(self.model.df[self.x_parameter])
+        x_range = np.linspace(np.nanmin(x_data),np.nanmax(x_data), 100)
+
+        y_data = np.array(self.model.df[self.y_parameter])
+
+        line_vars = get_line(self.split_point1, self.split_point2)
+
+        if isbelow(self.model.region_point, line_vars):
+            self.shade_artist = self.view.scatterPlot.fill_between(x_range, np.nanmin(y_data), straight_line(x_range, *line_vars), alpha = 0.1, fc = 'g')
+            logging.info(f"Click detected at {event.xdata}, {event.ydata}, shading below split line.")
+        else:
+            self.shade_artist = self.view.scatterPlot.fill_between(x_range, straight_line(x_range, *line_vars), np.nanmax(y_data), alpha = 0.1, fc = 'g')
+            logging.info(f"Click detected at {event.xdata}, {event.ydata}, shading above split line.")
+
+        
+
+        self.view.updatePlotButton.setEnabled(True)
+        self.view.chooseFirstButton.setEnabled(True)
+        self.view.chooseSecButton.setEnabled(True)
+        self.view.chooseRegionButton.setEnabled(True)
+        self.view.resetAllButton.setEnabled(True)
+        self.view.saveSelectionButton.setEnabled(True)
+        self.view.xBox.setEnabled(True)
+        self.view.yBox.setEnabled(True)
+
+        #Disconnect split point selection callback, reconnect free select callback
+        self.view.scatterPlot.canvas.mpl_disconnect(self.scatter_cid)
+        self.scatter_cid = self.view.scatterPlot.canvas.mpl_connect('button_press_event', self.select_event)
+
+    def _reset_shading(self):
+        if self.shade_artist is not None:
+            self.shade_artist.remove()
+            self.view.scatterPlot.update()
+            self.shade_artist = None
+            self.model.region_point = None
+            self.view.saveSelectionButton.setEnabled(False)
 
     def reset_all_choices(self):
         if self.split_point1_artist is not None:
@@ -345,6 +422,7 @@ class Controller():
             self.split_point2_artist.remove()   
         if self.split_line_artist is not None:
             self.split_line_artist.remove()
+        self._reset_shading()
         self.view.scatterPlot.update()
         self.view.eventPlot.update()
         self.split_point1 = None
@@ -353,6 +431,14 @@ class Controller():
         self.split_point2_artist = None
         self.split_line_artist = None
 
+    def save_selection(self):
+        if self.model.region_point is None or self.shade_artist is None:
+            raise ValueError("No region selected before attempting to save.")
+        line_vars = get_line(self.split_point1, self.split_point2)
+        subDf = self.model.get_sub_df(self.model.region_point, (self.x_parameter, self.y_parameter), line_vars)
+        fname = save_dialog(self.view.dataframeLocation.text(), "PKL File (*.pkl)")
+        subDf.to_pickle(fname)
+        logging.info("Selection saved!")
             
 
 
