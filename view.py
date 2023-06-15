@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 from model import Point
+import numpy as np
 
 class MplCanvas(FigureCanvasQTAgg):
     """MPL/QT Canvas with some default characteristics and some axes."""
@@ -13,6 +14,87 @@ class MplCanvas(FigureCanvasQTAgg):
 
     def clear(self):
         self.axes.cla()
+
+class MplCanvasHists(FigureCanvasQTAgg):
+    """MPL/QT Canvas with some default characteristics and some axes."""
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.gs = self.fig.add_gridspec(2, 2,  width_ratios=(4, 1), height_ratios=(1, 4),
+                      left=0.1, right=0.9, bottom=0.1, top=0.9,
+                      wspace=0.05, hspace=0.05)
+        # Create the Axes.
+        self.axes = self.fig.add_subplot(self.gs[1, 0])
+        self.ax_histx = self.fig.add_subplot(self.gs[0, 0], sharex=self.axes)
+        self.ax_histy = self.fig.add_subplot(self.gs[1, 1], sharey=self.axes)
+        # no labels
+        self.ax_histx.tick_params(axis="x", labelbottom=False)
+        self.ax_histy.tick_params(axis="y", labelleft=False)
+        super(MplCanvasHists,self).__init__(self.fig)
+
+    def clear(self):
+        self.axes.cla()
+        self.ax_histx.cla()
+        self.ax_histy.cla()
+
+class ScatterPlotHists(QWidget):
+    def __init__(self, title, autoscale = True):
+        super().__init__()
+        self.title = title
+        self.wLayout = QVBoxLayout()
+        self.canvas = MplCanvasHists(self)
+        self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        self.canvas.fig.suptitle(title)
+        self.canvas.axes.autoscale(autoscale)
+
+        self.setLayout(self.wLayout)
+        self.wLayout.addWidget(self.canvas)
+        self.wLayout.addWidget(self.toolbar)
+
+    def clear_axes(self):
+        self.canvas.clear()
+        self.label_x("")
+        self.label_y("")
+        self.canvas.fig.suptitle(self.title)
+        self.canvas.draw()
+
+    def scatter(self,x, y, **kwargs):
+        # the scatter plot:
+        self.canvas.axes.scatter(x, y, **kwargs)
+
+        # now determine nice limits by hand:
+        bin_num = 100
+
+        self.canvas.ax_histx.hist(x, bins=bin_num)
+        self.canvas.ax_histy.hist(y, bins=bin_num, orientation='horizontal')
+
+    def plot_point(self, point: Point, **kwargs):
+        artist = self.canvas.axes.plot(point.x, point.y, **kwargs)
+        self.canvas.draw()
+        return artist
+    
+    def fill_between(self, x, y1, y2, **kwargs):
+        poly = self.canvas.axes.fill_between(x,y1,y2,**kwargs)
+        self.canvas.draw()
+        return poly
+
+    def label_x(self, new_label, **kwargs):
+        self.canvas.axes.set_xlabel(new_label, **kwargs)
+        self.canvas.draw()
+
+    def label_y(self, new_label, **kwargs):
+        self.canvas.axes.set_ylabel(new_label, **kwargs)
+        self.canvas.draw()
+
+    def update_toolbar(self):
+        self.toolbar.update()
+
+    def set_lims(self, top, bottom, left, right):
+        self.canvas.axes.set_xlim(left, right)
+        self.canvas.axes.set_ylim(bottom, top)
+        self.canvas.draw()
+
+    def update(self):
+        self.canvas.draw()    
     
 class PlotWithToolbar(QWidget):
     def __init__(self, title, autoscale = True):
@@ -144,7 +226,7 @@ class MainWindow(QMainWindow):
 
     def _initialise_plots(self):
         #Canvases
-        self.scatterPlot = PlotWithToolbar("Scatter Plot",autoscale=False)
+        self.scatterPlot = ScatterPlotHists("Scatter Plot", autoscale=False)
         self.eventPlot = PlotWithToolbar("Selected Event")
         #Pack
         self.plotsLayout.addWidget(self.scatterPlot)

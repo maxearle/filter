@@ -3,7 +3,7 @@ import numpy as np
 import h5py
 import os
 
-fname = "/Volumes/ME424_HD/nanopores/2023_02_20/ch1/pore2/data3/EVENTS.hdf5"
+fname = r"C:\Users\me424\Documents\Python\nas\Scripts\nas\filter\filter\tool_scripts\output.hdf5"
 file = h5py.File(fname, 'r')
 
 data = file["current_data"]
